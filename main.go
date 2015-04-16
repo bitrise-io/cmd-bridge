@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os/exec"
+	"strings"
 	"syscall"
 )
 
@@ -38,6 +40,8 @@ func respondWithJSON(w http.ResponseWriter, respModel ResponseModel) error {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 
+	log.Printf("=> Response: %#v\n", respModel)
+
 	err := json.NewEncoder(w).Encode(&respModel)
 	return err
 }
@@ -60,8 +64,23 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 func commandHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(" (i) Command received")
 
+	defer r.Body.Close()
+	bodyString := ""
+	if bodyBytes, err := ioutil.ReadAll(r.Body); err != nil {
+		resp := createErrorResponseModel(
+			fmt.Sprintf("Failed to ready Request Body: %s", err),
+			1,
+		)
+		respondWithJSON(w, resp)
+		return
+	} else {
+		bodyString = string(bodyBytes)
+	}
+	log.Println(" (i) Raw request body: ", bodyString)
+
 	// queryValues := r.URL.Query()
-	decoder := json.NewDecoder(r.Body)
+	// decoder := json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(strings.NewReader(bodyString))
 	var cmdToRun CommandModel
 	if err := decoder.Decode(&cmdToRun); err != nil {
 		resp := createErrorResponseModel(
@@ -98,7 +117,7 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	//
 	// Response
 	statusMsg := okStatusMsg
-	respMsg := "Test finished with success"
+	respMsg := "Command finished with success"
 	if err != nil {
 		log.Println(" [!] Error: ", err)
 		WriteLineToCommandLog(fmt.Sprintf(" [!] Error: %s", err))
