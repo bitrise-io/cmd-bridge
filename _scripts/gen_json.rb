@@ -8,9 +8,9 @@ require 'json'
 # 	]
 # }
 
-CONFIG_json_content = {
-	command: 'env'
-}
+# CONFIG_json_content = {
+# 	command: 'env'
+# }
 
 # CONFIG_json_content = {
 # 	command: 'echo "$HOME"',

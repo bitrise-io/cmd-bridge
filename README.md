@@ -29,9 +29,18 @@ Echo a supplied environment variable:
 
     curl -X POST -d '{"command":"echo \"Hello: ${T_KEY}!\"","environments":[{"key":"T_KEY","value":"test value, with equal = sign, for test"}]}' http://localhost:27473/cmd
 
-Use the included `_sctips/gen_json.rb` to generate the content for cURL:
+Use the included `_scripts/gen_json.rb` to generate the content (JSON) for cURL:
 
     curl -X POST -d "$(ruby _scripts/gen_json.rb)" http://localhost:27473/cmd
+
+Run a bash script:
+
+    curl -X POST -d '{"command":"bash /path/to/script.sh"}' http://localhost:27473/cmd
+
+If you specify the script's path through a (environment) variable:
+
+    export SCRIPT_PTH=/path/to/script
+    curl -X POST -d "{\"command\":\"bash ${SCRIPT_PTH}\"}" http://localhost:27473/cmd
 
 ## TODO
 
