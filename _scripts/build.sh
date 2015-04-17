@@ -15,7 +15,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 echo "-> Moving binary"
-mv cmd-runner-miniserver bin/osx/
+mv cmd-bridge bin/osx/
 if [[ $? -ne 0 ]]; then
 	echo " [!] Binary move Failed!"
 	exit 1

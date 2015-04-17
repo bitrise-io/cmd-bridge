@@ -1,4 +1,4 @@
-# cmd-runner-miniserver
+# cmd-bridge
 
 Stripped down, minimal server written in [go](https://golang.org/)
 which accepts a command line command, executes it,
@@ -9,9 +9,9 @@ with the exit status.
 
 build: `$ bash _scripts/build.sh`
 
-run: `$ ./bin/osx/cmd-runner-miniserver`
+run: `$ ./bin/osx/cmd-bridge`
 
-Or in one command: `$ bash _scripts/build.sh && ./bin/osx/cmd-runner-miniserver`
+Or in one command: `$ bash _scripts/build.sh && ./bin/osx/cmd-bridge`
 
 ## Usage
 
@@ -23,7 +23,7 @@ For example:
 
 A simple `echo 'Hello world!'`:
 
-    curl -X POST -d "{\"command\": \"echo 'Hello world!'\"}" http://localhost:27473/cmd
+    curl -X POST -d "{\"command\": \"echo 'Hello world'\"}" http://localhost:27473/cmd
 
 Echo a supplied environment variable:
 
