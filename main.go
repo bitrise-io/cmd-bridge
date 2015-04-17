@@ -1,21 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 )
 
 var (
-	serverPort            = "27473"
-	okStatusMsg           = "ok"
-	errorStatusMsg        = "error"
-	endOfCommandLogMarker = "_EOF__Hh2UpL4OExUSeP5LY1QaMoty97ltFqlCZaznnxjb__LOG"
+	configServerPort            = "27473"
+	configOkStatusMsg           = "ok"
+	configErrorStatusMsg        = "error"
+	configEndOfCommandLogMarker = "_EOF__Hh2UpL4OExUSeP5LY1QaMoty97ltFqlCZaznnxjb__LOG"
+	configCommandEnvPrefix      = "_CMDENV__"
 )
 
 type ResponseModel struct {
@@ -26,7 +30,7 @@ type ResponseModel struct {
 
 func createErrorResponseModel(errorMessage string, exitCode int) ResponseModel {
 	return ResponseModel{
-		Status:   errorStatusMsg,
+		Status:   configErrorStatusMsg,
 		Msg:      errorMessage,
 		ExitCode: exitCode,
 	}
@@ -34,7 +38,7 @@ func createErrorResponseModel(errorMessage string, exitCode int) ResponseModel {
 
 func respondWithJSON(w http.ResponseWriter, respModel ResponseModel) error {
 	w.Header().Set("Content Type", "application/json")
-	if respModel.Status == okStatusMsg {
+	if respModel.Status == configOkStatusMsg {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusBadRequest)
@@ -51,7 +55,7 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 
 	//
 	respModel := ResponseModel{
-		Status:   okStatusMsg,
+		Status:   configOkStatusMsg,
 		Msg:      "pong",
 		ExitCode: 0,
 	}
@@ -116,12 +120,12 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 
 	//
 	// Response
-	statusMsg := okStatusMsg
+	statusMsg := configOkStatusMsg
 	respMsg := "Command finished with success"
 	if err != nil {
 		log.Println(" [!] Error: ", err)
 		WriteLineToCommandLog(fmt.Sprintf(" [!] Error: %s", err))
-		statusMsg = errorStatusMsg
+		statusMsg = configErrorStatusMsg
 		respMsg = fmt.Sprintf("%s", err)
 	}
 	//
@@ -131,7 +135,7 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 		ExitCode: cmdExitCode,
 	}
 
-	WriteLineToCommandLog(fmt.Sprintf("%s: %s", endOfCommandLogMarker, statusMsg))
+	WriteLineToCommandLog(fmt.Sprintf("%s: %s", configEndOfCommandLogMarker, statusMsg))
 	WriteLineToCommandLog("-> Command Finished")
 
 	if err := respondWithJSON(w, respModel); err != nil {
@@ -139,10 +143,103 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func main() {
+func usage() {
+	fmt.Println("# Usage:")
+	fmt.Println("\n## Server mode")
+	fmt.Println("\nIf no parameter / flag specified it'll try to start a cmd-bridge server.")
+	fmt.Println("\n## Command sender mode")
+	fmt.Println("\nIf a command parameter is specified cmd-bridge will try to connect")
+	fmt.Println("to an already running cmd-bridge server and execute the specified")
+	fmt.Println("command through it.")
+	fmt.Println("\n# Available parameters / flags:")
+	fmt.Printf("\nUsage: %s [FLAGS]\n", os.Args[0])
+	flag.PrintDefaults()
+}
+
+func startServer() error {
 	http.HandleFunc("/cmd", commandHandler)
 	http.HandleFunc("/ping", pingHandler)
-	fmt.Println("Ready to serve on port:", serverPort)
+	fmt.Println("Ready to serve on port:", configServerPort)
 	fmt.Println()
-	http.ListenAndServe(":"+serverPort, nil)
+	return http.ListenAndServe(":"+configServerPort, nil)
+}
+
+func sendCommandToServer(cmdToSend CommandModel) error {
+	log.Printf("Sending command: %#v\n", cmdToSend)
+	cmdBytes, err := json.Marshal(cmdToSend)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post("http://localhost:27473/cmd", "application/json", bytes.NewReader(cmdBytes))
+	if err != nil {
+		// handle error
+		return err
+	}
+	defer resp.Body.Close()
+	respBodyString := ""
+	if respBodyBytes, err := ioutil.ReadAll(resp.Body); err != nil {
+		return err
+	} else {
+		respBodyString = string(respBodyBytes)
+	}
+	log.Printf("Response: %s", respBodyString)
+
+	return nil
+}
+
+func getCommandEnvironments() []EnvironmentKeyValue {
+	cmdEnvs := []EnvironmentKeyValue{}
+
+	for _, anEnv := range os.Environ() {
+		splits := strings.Split(anEnv, "=")
+		keyWithPrefix := splits[0]
+		if strings.HasPrefix(keyWithPrefix, configCommandEnvPrefix) {
+			cmdEnvItem := EnvironmentKeyValue{
+				Key:   keyWithPrefix[len(configCommandEnvPrefix):],
+				Value: os.Getenv(keyWithPrefix),
+			}
+			cmdEnvs = append(cmdEnvs, cmdEnvItem)
+		}
+	}
+
+	log.Println("cmdEnvs: ", cmdEnvs)
+
+	return cmdEnvs
+}
+
+func main() {
+	var (
+		doCommand = flag.String("do", "", "connect to a running cmd-bridge and do the specified command")
+		isHelp    = flag.Bool("help", false, "show help")
+	)
+
+	flag.Usage = usage
+	flag.Parse()
+
+	if *isHelp {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	if *doCommand == "" {
+		fmt.Println("No command specified - starting server...")
+		if err := startServer(); err != nil {
+			log.Fatal(err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	doCmdEnvs := getCommandEnvironments()
+
+	cmdToSend := CommandModel{
+		Command:      *doCommand,
+		Environments: doCmdEnvs,
+	}
+	err := sendCommandToServer(cmdToSend)
+	if err != nil {
+		log.Println("Error: ", err)
+		os.Exit(1)
+	}
 }

@@ -5,15 +5,27 @@ which accepts a command line command, executes it,
 logs it's output and returns a JSON response
 with the exit status.
 
-## Build & run
+
+## Build & run (for development)
 
 build: `$ bash _scripts/build.sh`
 
-run: `$ ./bin/osx/cmd-bridge`
+run in server mode: `$ ./bin/osx/cmd-bridge`
 
 Or in one command: `$ bash _scripts/build.sh && ./bin/osx/cmd-bridge`
 
+Or with the included *build-and-run* script: `$ bash _scripts/build_and_run.sh`
+
+run in non-server mode: `$ ./bin/osx/cmd-bridge -help`
+
+Or in one command: `$ bash _scripts/build.sh && ./bin/osx/cmd-bridge -help`
+
+Or with the included *build-and-run* script: `$ bash _scripts/build_and_run.sh -help`
+
+
 ## Usage
+
+### Server mode
 
 Once the server runs you can use it through HTTP messages.
 
@@ -41,6 +53,31 @@ If you specify the script's path through a (environment) variable:
 
     export SCRIPT_PTH=/path/to/script
     curl -X POST -d "{\"command\":\"bash ${SCRIPT_PTH}\"}" http://localhost:27473/cmd
+
+
+### Non-server mode
+
+*Running commands requires a running cmd-bridge in server mode.*
+
+Print help: `$ bash _scripts/build_and_run.sh -help`
+
+Run a bash script: `$ bash _scripts/build_and_run.sh -do 'bash /path/to/script'`
+
+**You can also pass environments** for your command. Environment variables
+available for the non-server mode process will be sent to the server
+process if you prefix the environment key with `_CMDENV__`.
+
+For example to send an environment variable with key `MY_TEST_ENV` to
+the server process you should store the value in an environment
+with key `_CMDENV__MY_TEST_ENV` so that it's available for the non-server
+mode process. The non-server process will collect all of these environments,
+remove the special prefix and send it to the server mode process.
+
+An example:
+
+    $ export _CMDENV__ECHO_THIS_ENV='this environment variable will be available for the server mode process, as ECHO_THIS_ENV'
+    $ bash _scripts/build_and_run.sh -do='echo "ECHO_THIS_ENV: ${ECHO_THIS_ENV}"'
+
 
 ## TODO
 
