@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/aybabtme/tailf"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -164,14 +166,8 @@ func startServer() error {
 	return http.ListenAndServe(":"+configServerPort, nil)
 }
 
-func sendCommandToServer(cmdToSend CommandModel) error {
-	log.Printf("Sending command: %#v\n", cmdToSend)
-	cmdBytes, err := json.Marshal(cmdToSend)
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.Post("http://localhost:27473/cmd", "application/json", bytes.NewReader(cmdBytes))
+func sendJSONRequestToServer(jsonBytes []byte) error {
+	resp, err := http.Post("http://localhost:27473/cmd", "application/json", bytes.NewReader(jsonBytes))
 	if err != nil {
 		// handle error
 		return err
@@ -184,6 +180,53 @@ func sendCommandToServer(cmdToSend CommandModel) error {
 		respBodyString = string(respBodyBytes)
 	}
 	log.Printf("Response: %s", respBodyString)
+
+	return nil
+}
+
+func sendCommandToServer(cmdToSend CommandModel) error {
+	log.Printf("Sending command: %#v\n", cmdToSend)
+
+	tempFile, err := makeTempFile("cmd-bridge-tmp")
+	if err != nil {
+		return err
+	}
+	tmpfilePth := tempFile.Name()
+	log.Println("tmpfilePth: ", tmpfilePth)
+	defer os.Remove(tmpfilePth)
+	defer tempFile.Close()
+
+	cmdToSend.LogFilePath = tmpfilePth
+
+	cmdBytes, err := json.Marshal(cmdToSend)
+	if err != nil {
+		return err
+	}
+
+	done := make(chan struct{})
+	go func() {
+		sendJSONRequestToServer(cmdBytes)
+		close(done)
+	}()
+
+	isFollowFromStart := true
+	follow, err := tailf.Follow(tempFile.Name(), isFollowFromStart)
+	if err != nil {
+		log.Fatalf("couldn't follow %q: %v", tempFile.Name(), err)
+	}
+
+	go func() {
+		<-done
+		if err := follow.Close(); err != nil {
+			log.Fatalf("couldn't close follower: %v", err)
+		}
+	}()
+
+	_, err = io.Copy(os.Stdout, follow)
+	if err != nil {
+		log.Fatalf("couldn't read from follower: %v", err)
+		return err
+	}
 
 	return nil
 }
