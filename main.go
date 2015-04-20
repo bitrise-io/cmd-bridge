@@ -265,6 +265,7 @@ func main() {
 		doCommand = flag.String("do", "", "connect to a running cmd-bridge and do the specified command")
 		isHelp    = flag.Bool("help", false, "show help")
 		isVerbose = flag.Bool("verbose", false, "verbose output")
+		isVersion = flag.Bool("version", false, "prints version")
 	)
 
 	flag.Usage = usage
@@ -272,6 +273,11 @@ func main() {
 
 	if *isHelp {
 		flag.Usage()
+		os.Exit(0)
+	}
+
+	if *isVersion {
+		fmt.Println(VersionString)
 		os.Exit(0)
 	}
 
