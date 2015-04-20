@@ -18,6 +18,7 @@ echo "-> Moving binary"
 mv cmd-bridge bin/osx/
 if [[ $? -ne 0 ]]; then
 	echo " [!] Binary move Failed!"
+	ls -alh
 	exit 1
 fi
 
