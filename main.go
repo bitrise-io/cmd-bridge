@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/aybabtme/tailf"
@@ -11,9 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
-	"syscall"
 )
 
 var (
@@ -24,11 +23,27 @@ var (
 	configCommandEnvPrefix      = "_CMDENV__"
 )
 
+func usage() {
+	fmt.Println("# Usage:")
+	fmt.Println("\n## Server mode")
+	fmt.Println("\nIf no parameter / flag specified it'll try to start a cmd-bridge server.")
+	fmt.Println("\n## Command sender mode")
+	fmt.Println("\nIf a command parameter is specified cmd-bridge will try to connect")
+	fmt.Println("to an already running cmd-bridge server and execute the specified")
+	fmt.Println("command through it.")
+	fmt.Println("\n# Available parameters / flags:")
+	fmt.Printf("\nUsage: %s [FLAGS]\n", os.Args[0])
+	flag.PrintDefaults()
+}
+
 type ResponseModel struct {
 	Status   string `json:"status"`
 	Msg      string `json:"msg"`
 	ExitCode int    `json:"exit_code"`
 }
+
+//
+// --- Server mode
 
 func createErrorResponseModel(errorMessage string, exitCode int) ResponseModel {
 	return ResponseModel{
@@ -102,22 +117,7 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	cmdExitCode := 0
 	if err == nil {
 		defer CloseCommandLogWriter()
-
-		// WriteLineToCommandLog(fmt.Sprintf(" (i) Using Command Params: %#v", commandParams))
-		// err = commandParams.Validate()
-		// if err == nil {
-		err = ExecuteCommand(cmdToRun)
-		if err != nil {
-			// Did the command fail because of an unsuccessful exit code
-			var waitStatus syscall.WaitStatus
-			if exitError, ok := err.(*exec.ExitError); ok {
-				waitStatus = exitError.Sys().(syscall.WaitStatus)
-				exCode := waitStatus.ExitStatus()
-				fmt.Println("Exit status: ", exCode)
-				cmdExitCode = exCode
-			}
-		}
-		// }
+		cmdExitCode, err = ExecuteCommand(cmdToRun)
 	}
 
 	//
@@ -145,19 +145,6 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func usage() {
-	fmt.Println("# Usage:")
-	fmt.Println("\n## Server mode")
-	fmt.Println("\nIf no parameter / flag specified it'll try to start a cmd-bridge server.")
-	fmt.Println("\n## Command sender mode")
-	fmt.Println("\nIf a command parameter is specified cmd-bridge will try to connect")
-	fmt.Println("to an already running cmd-bridge server and execute the specified")
-	fmt.Println("command through it.")
-	fmt.Println("\n# Available parameters / flags:")
-	fmt.Printf("\nUsage: %s [FLAGS]\n", os.Args[0])
-	flag.PrintDefaults()
-}
-
 func startServer() error {
 	http.HandleFunc("/cmd", commandHandler)
 	http.HandleFunc("/ping", pingHandler)
@@ -165,6 +152,9 @@ func startServer() error {
 	fmt.Println()
 	return http.ListenAndServe(":"+configServerPort, nil)
 }
+
+//
+// --- non server mode
 
 func sendJSONRequestToServer(jsonBytes []byte) error {
 	resp, err := http.Post("http://localhost:27473/cmd", "application/json", bytes.NewReader(jsonBytes))
@@ -181,11 +171,26 @@ func sendJSONRequestToServer(jsonBytes []byte) error {
 	}
 	log.Printf("Response: %s", respBodyString)
 
+	var respModel ResponseModel
+	jsonParser := json.NewDecoder(strings.NewReader(respBodyString))
+	if err := jsonParser.Decode(&respModel); err != nil {
+		return err
+	}
+	log.Printf("respModel: %#v\n", respModel)
+
+	if respModel.Status != configOkStatusMsg {
+		return errors.New(fmt.Sprintf("Server returned an error response: %#v", respModel))
+	}
+
+	if respModel.ExitCode != 0 {
+		return errors.New(fmt.Sprintf("Bridged command exit code is not 0: %#v", respModel))
+	}
+
 	return nil
 }
 
-func sendCommandToServer(cmdToSend CommandModel) error {
-	log.Printf("Sending command: %#v\n", cmdToSend)
+func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) error {
+	vLogln(fmt.Sprintf("Sending command: %#v", cmdToSend))
 
 	tempFile, err := makeTempFile("cmd-bridge-tmp")
 	if err != nil {
@@ -203,9 +208,10 @@ func sendCommandToServer(cmdToSend CommandModel) error {
 		return err
 	}
 
+	var bridgedCommandError error = nil
 	done := make(chan struct{})
 	go func() {
-		sendJSONRequestToServer(cmdBytes)
+		bridgedCommandError = sendJSONRequestToServer(cmdBytes)
 		close(done)
 	}()
 
@@ -228,7 +234,7 @@ func sendCommandToServer(cmdToSend CommandModel) error {
 		return err
 	}
 
-	return nil
+	return bridgedCommandError
 }
 
 func getCommandEnvironments() []EnvironmentKeyValue {
@@ -246,7 +252,7 @@ func getCommandEnvironments() []EnvironmentKeyValue {
 		}
 	}
 
-	log.Println("cmdEnvs: ", cmdEnvs)
+	vLogln("cmdEnvs: ", cmdEnvs)
 
 	return cmdEnvs
 }
@@ -255,6 +261,7 @@ func main() {
 	var (
 		doCommand = flag.String("do", "", "connect to a running cmd-bridge and do the specified command")
 		isHelp    = flag.Bool("help", false, "show help")
+		isVerbose = flag.Bool("verbose", false, "verbose output")
 	)
 
 	flag.Usage = usage
@@ -263,6 +270,12 @@ func main() {
 	if *isHelp {
 		flag.Usage()
 		os.Exit(0)
+	}
+
+	log.Println(" (i) isVerbose=", *isVerbose)
+	if *isVerbose == true {
+		log.Println(" (i) Verbose mode")
+		Config_IsVerboseLogMode = true
 	}
 
 	if *doCommand == "" {
@@ -280,7 +293,7 @@ func main() {
 		Command:      *doCommand,
 		Environments: doCmdEnvs,
 	}
-	err := sendCommandToServer(cmdToSend)
+	err := sendCommandToServer(cmdToSend, *isVerbose)
 	if err != nil {
 		log.Println("Error: ", err)
 		os.Exit(1)

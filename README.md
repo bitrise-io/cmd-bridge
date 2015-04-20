@@ -8,6 +8,8 @@ with the exit status.
 
 ## Build & run (for development)
 
+Don't forget to `$ go get ./...`
+
 build: `$ bash _scripts/build.sh`
 
 run in server mode: `$ ./bin/osx/cmd-bridge`

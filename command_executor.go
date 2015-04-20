@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	// "strings"
+	"syscall"
 )
 
 type EnvironmentKeyValue struct {
@@ -21,7 +22,7 @@ type CommandModel struct {
 	Environments     []EnvironmentKeyValue `json:"environments"`
 }
 
-func RunCommandInDirWithArgsEnvsAndWriters(dirPath string, command string, cmdArgs []string, cmdEnvs []string, stdOutWriter, stdErrWriter io.Writer) error {
+func RunCommandInDirWithArgsEnvsAndWriters(dirPath string, command string, cmdArgs []string, cmdEnvs []string, stdOutWriter, stdErrWriter io.Writer) (int, error) {
 	c := exec.Command(command, cmdArgs...)
 	c.Env = append(os.Environ(), cmdEnvs...)
 	// c.Env = cmdEnvs // only the supported envs, no inherited ones
@@ -31,10 +32,17 @@ func RunCommandInDirWithArgsEnvsAndWriters(dirPath string, command string, cmdAr
 		c.Dir = dirPath
 	}
 
+	cmdExitCode := 0
 	if err := c.Run(); err != nil {
-		return err
+		// Did the command fail because of an unsuccessful exit code
+		var waitStatus syscall.WaitStatus
+		if exitError, ok := err.(*exec.ExitError); ok {
+			waitStatus = exitError.Sys().(syscall.WaitStatus)
+			cmdExitCode = waitStatus.ExitStatus()
+		}
+		return cmdExitCode, err
 	}
-	return nil
+	return 0, nil
 }
 
 // func RunCommandInDirWithArgs(dirPath string, command string, cmdArgs []string) error {
@@ -49,9 +57,9 @@ func RunCommandInDirWithArgsEnvsAndWriters(dirPath string, command string, cmdAr
 // 	return err
 // }
 
-func ExecuteCommand(cmdToRun CommandModel) error {
+func ExecuteCommand(cmdToRun CommandModel) (int, error) {
 	if err := WriteLineToCommandLog("[[command-start]]"); err != nil {
-		return err
+		return 0, err
 	}
 
 	// // unlock keychain
@@ -77,12 +85,12 @@ func ExecuteCommand(cmdToRun CommandModel) error {
 	}
 
 	//
-	commandErr := RunCommandInDirWithArgsEnvsAndWriters(cmdToRun.WorkingDirectory, cmdExec, cmdArgs, cmdEnvs, CommandLogWriter, CommandLogWriter)
+	cmdExitCode, commandErr := RunCommandInDirWithArgsEnvsAndWriters(cmdToRun.WorkingDirectory, cmdExec, cmdArgs, cmdEnvs, CommandLogWriter, CommandLogWriter)
 
 	if commandErr != nil {
-		WriteLineToCommandLog(fmt.Sprintf("%s", commandErr))
+		WriteLineToCommandLog(fmt.Sprintf("Error: %s", commandErr))
 	}
 
 	WriteLineToCommandLog("[[command-finished]]")
-	return commandErr
+	return cmdExitCode, commandErr
 }

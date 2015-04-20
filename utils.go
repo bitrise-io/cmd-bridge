@@ -2,8 +2,11 @@ package main
 
 import (
 	"io/ioutil"
+	"log"
 	"os"
 )
+
+var Config_IsVerboseLogMode = false
 
 func makeTempFile(fName string) (*os.File, error) {
 	f, err := ioutil.TempFile(os.TempDir(), fName)
@@ -11,4 +14,10 @@ func makeTempFile(fName string) (*os.File, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+func vLogln(s string, args ...interface{}) {
+	if Config_IsVerboseLogMode {
+		log.Println(s, args)
+	}
 }
