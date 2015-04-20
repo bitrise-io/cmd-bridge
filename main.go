@@ -160,11 +160,13 @@ func sendJSONRequestToServer(jsonBytes []byte) error {
 	resp, err := http.Post("http://localhost:27473/cmd", "application/json", bytes.NewReader(jsonBytes))
 	if err != nil {
 		// handle error
+		log.Println("Failed to send command to cmd-bridge server: ", err)
 		return err
 	}
 	defer resp.Body.Close()
 	respBodyString := ""
 	if respBodyBytes, err := ioutil.ReadAll(resp.Body); err != nil {
+		log.Println("Failed to read cmd-bridge server response: ", err)
 		return err
 	} else {
 		respBodyString = string(respBodyBytes)
@@ -174,6 +176,7 @@ func sendJSONRequestToServer(jsonBytes []byte) error {
 	var respModel ResponseModel
 	jsonParser := json.NewDecoder(strings.NewReader(respBodyString))
 	if err := jsonParser.Decode(&respModel); err != nil {
+		log.Println("Failed to decode cmd-bridge server response (JSON): ", err)
 		return err
 	}
 	vLogf("respModel: %#v\n", respModel)
@@ -190,8 +193,6 @@ func sendJSONRequestToServer(jsonBytes []byte) error {
 }
 
 func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) error {
-	vLogln(fmt.Sprintf("Sending command: %#v", cmdToSend))
-
 	tempFile, err := makeTempFile("cmd-bridge-tmp")
 	if err != nil {
 		return err
@@ -202,6 +203,8 @@ func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) error {
 	defer tempFile.Close()
 
 	cmdToSend.LogFilePath = tmpfilePth
+
+	vLogln(fmt.Sprintf("Sending command: %#v", cmdToSend))
 
 	cmdBytes, err := json.Marshal(cmdToSend)
 	if err != nil {
@@ -252,7 +255,7 @@ func getCommandEnvironments() []EnvironmentKeyValue {
 		}
 	}
 
-	vLogln("cmdEnvs: ", cmdEnvs)
+	vLogf("cmdEnvs: %#v\n", cmdEnvs)
 
 	return cmdEnvs
 }
@@ -294,7 +297,7 @@ func main() {
 	}
 	err := sendCommandToServer(cmdToSend, *isVerbose)
 	if err != nil {
-		log.Println("Error: ", err)
+		vLogln("Error: ", err)
 		os.Exit(1)
 	}
 }
