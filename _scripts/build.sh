@@ -1,5 +1,12 @@
 #!/bin/bash
 
+set -e
+
+THIS_SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "${THIS_SCRIPT_DIR}/.."
+
+set +e
+
 echo "-> Testing"
 go test ./...
 if [[ $? -ne 0 ]]; then
@@ -15,7 +22,8 @@ if [[ $? -ne 0 ]]; then
 fi
 
 echo "-> Moving binary"
-mv cmd-bridge bin/osx/
+mkdir -p ./bin/osx
+mv ./cmd-bridge ./bin/osx/
 if [[ $? -ne 0 ]]; then
 	echo " [!] Binary move Failed!"
 	ls -alh
