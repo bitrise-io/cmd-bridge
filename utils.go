@@ -21,3 +21,9 @@ func vLogln(s string, args ...interface{}) {
 		log.Println(s, args)
 	}
 }
+
+func vLogf(s string, args ...interface{}) {
+	if Config_IsVerboseLogMode {
+		log.Printf(s, args)
+	}
+}

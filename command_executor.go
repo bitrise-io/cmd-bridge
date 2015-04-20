@@ -67,7 +67,9 @@ func ExecuteCommand(cmdToRun CommandModel) (int, error) {
 	// 	return err
 	// }
 
-	WriteLineToCommandLog(fmt.Sprintf("Command to run: $ %s", cmdToRun.Command))
+	if Config_IsVerboseLogMode {
+		WriteLineToCommandLog(fmt.Sprintf("Command to run: $ %s", cmdToRun.Command))
+	}
 
 	cmdExec := "/bin/bash"
 	cmdArgs := []string{
@@ -88,7 +90,7 @@ func ExecuteCommand(cmdToRun CommandModel) (int, error) {
 	cmdExitCode, commandErr := RunCommandInDirWithArgsEnvsAndWriters(cmdToRun.WorkingDirectory, cmdExec, cmdArgs, cmdEnvs, CommandLogWriter, CommandLogWriter)
 
 	if commandErr != nil {
-		WriteLineToCommandLog(fmt.Sprintf("Error: %s", commandErr))
+		WriteLineToCommandLog(fmt.Sprintf("Command failed: %s", commandErr))
 	}
 
 	WriteLineToCommandLog("[[command-finished]]")

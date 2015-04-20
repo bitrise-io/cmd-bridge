@@ -6,7 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/aybabtme/tailf"
+	"github.com/bitrise-io/tailf"
 	"io"
 	"io/ioutil"
 	"log"
@@ -16,11 +16,10 @@ import (
 )
 
 var (
-	configServerPort            = "27473"
-	configOkStatusMsg           = "ok"
-	configErrorStatusMsg        = "error"
-	configEndOfCommandLogMarker = "_EOF__Hh2UpL4OExUSeP5LY1QaMoty97ltFqlCZaznnxjb__LOG"
-	configCommandEnvPrefix      = "_CMDENV__"
+	configServerPort       = "27473"
+	configOkStatusMsg      = "ok"
+	configErrorStatusMsg   = "error"
+	configCommandEnvPrefix = "_CMDENV__"
 )
 
 func usage() {
@@ -126,7 +125,7 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	respMsg := "Command finished with success"
 	if err != nil {
 		log.Println(" [!] Error: ", err)
-		WriteLineToCommandLog(fmt.Sprintf(" [!] Error: %s", err))
+		// WriteLineToCommandLog(fmt.Sprintf(" [!] Error: %s", err))
 		statusMsg = configErrorStatusMsg
 		respMsg = fmt.Sprintf("%s", err)
 	}
@@ -137,8 +136,9 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 		ExitCode: cmdExitCode,
 	}
 
-	WriteLineToCommandLog(fmt.Sprintf("%s: %s", configEndOfCommandLogMarker, statusMsg))
-	WriteLineToCommandLog("-> Command Finished")
+	if Config_IsVerboseLogMode {
+		WriteLineToCommandLog("-> Command Finished")
+	}
 
 	if err := respondWithJSON(w, respModel); err != nil {
 		log.Println(" [!] Failed to send Response: ", err)
@@ -169,14 +169,14 @@ func sendJSONRequestToServer(jsonBytes []byte) error {
 	} else {
 		respBodyString = string(respBodyBytes)
 	}
-	log.Printf("Response: %s", respBodyString)
+	vLogln("Response: ", respBodyString)
 
 	var respModel ResponseModel
 	jsonParser := json.NewDecoder(strings.NewReader(respBodyString))
 	if err := jsonParser.Decode(&respModel); err != nil {
 		return err
 	}
-	log.Printf("respModel: %#v\n", respModel)
+	vLogf("respModel: %#v\n", respModel)
 
 	if respModel.Status != configOkStatusMsg {
 		return errors.New(fmt.Sprintf("Server returned an error response: %#v", respModel))
@@ -197,7 +197,7 @@ func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) error {
 		return err
 	}
 	tmpfilePth := tempFile.Name()
-	log.Println("tmpfilePth: ", tmpfilePth)
+	vLogln("tmpfilePth: ", tmpfilePth)
 	defer os.Remove(tmpfilePth)
 	defer tempFile.Close()
 
@@ -272,7 +272,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	log.Println(" (i) isVerbose=", *isVerbose)
 	if *isVerbose == true {
 		log.Println(" (i) Verbose mode")
 		Config_IsVerboseLogMode = true
