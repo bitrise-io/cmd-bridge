@@ -6,8 +6,6 @@ import (
 	"os"
 )
 
-var Config_IsVerboseLogMode = false
-
 func makeTempFile(fName string) (*os.File, error) {
 	f, err := ioutil.TempFile(os.TempDir(), fName)
 	if err != nil {
