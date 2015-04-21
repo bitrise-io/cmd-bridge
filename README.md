@@ -85,3 +85,11 @@ An example:
 
 * Should handle Environment Variables (specify it for the command) but **should not** add it to it's own environment, in order to keep a "clean" command host environment.
   * This means that the supported Environment Variables have to be expanded before sending to this server. No `os.Setenv` should be used!
+
+
+## Release a new version
+
+1. Bump version in `version.go`
+2. `$ bash _scripts/build.sh`
+3. Commit
+4. Tag the commit with the same version defined in *version.go*
