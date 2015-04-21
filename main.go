@@ -262,10 +262,11 @@ func getCommandEnvironments() []EnvironmentKeyValue {
 
 func main() {
 	var (
-		doCommand = flag.String("do", "", "connect to a running cmd-bridge and do the specified command")
-		isHelp    = flag.Bool("help", false, "show help")
-		isVerbose = flag.Bool("verbose", false, "verbose output")
-		isVersion = flag.Bool("version", false, "prints version")
+		doCommand      = flag.String("do", "", "Connect to a running cmd-bridge and do the specified command")
+		flagCmdWorkDir = flag.String("workdir", "", "Working directory of the specified command.")
+		isHelp         = flag.Bool("help", false, "Show help")
+		isVerbose      = flag.Bool("verbose", false, "Verbose output")
+		isVersion      = flag.Bool("version", false, "Prints version")
 	)
 
 	flag.Usage = usage
@@ -298,8 +299,9 @@ func main() {
 	doCmdEnvs := getCommandEnvironments()
 
 	cmdToSend := CommandModel{
-		Command:      *doCommand,
-		Environments: doCmdEnvs,
+		Command:          *doCommand,
+		Environments:     doCmdEnvs,
+		WorkingDirectory: *flagCmdWorkDir,
 	}
 	err := sendCommandToServer(cmdToSend, *isVerbose)
 	if err != nil {
