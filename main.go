@@ -156,18 +156,21 @@ func startServer() error {
 //
 // --- non server mode
 
-func sendJSONRequestToServer(jsonBytes []byte) error {
+func sendJSONRequestToServer(jsonBytes []byte) (cmdExCode int, cmdErr error) {
+	cmdExCode = 1
+	cmdErr = nil
+
 	resp, err := http.Post("http://localhost:27473/cmd", "application/json", bytes.NewReader(jsonBytes))
 	if err != nil {
 		// handle error
 		log.Println("Failed to send command to cmd-bridge server: ", err)
-		return err
+		return 1, err
 	}
 	defer resp.Body.Close()
 	respBodyString := ""
 	if respBodyBytes, err := ioutil.ReadAll(resp.Body); err != nil {
 		log.Println("Failed to read cmd-bridge server response: ", err)
-		return err
+		return 1, err
 	} else {
 		respBodyString = string(respBodyBytes)
 	}
@@ -177,25 +180,29 @@ func sendJSONRequestToServer(jsonBytes []byte) error {
 	jsonParser := json.NewDecoder(strings.NewReader(respBodyString))
 	if err := jsonParser.Decode(&respModel); err != nil {
 		log.Println("Failed to decode cmd-bridge server response (JSON): ", err)
-		return err
+		return 1, err
 	}
 	vLogf("respModel: %#v\n", respModel)
+	cmdExCode = respModel.ExitCode
 
 	if respModel.Status != configOkStatusMsg {
-		return errors.New(fmt.Sprintf("Server returned an error response: %#v", respModel))
+		return cmdExCode, errors.New(fmt.Sprintf("Server returned an error response: %#v", respModel))
 	}
 
 	if respModel.ExitCode != 0 {
-		return errors.New(fmt.Sprintf("Bridged command exit code is not 0: %#v", respModel))
+		return cmdExCode, errors.New(fmt.Sprintf("Bridged command exit code is not 0: %#v", respModel))
 	}
 
-	return nil
+	return cmdExCode, nil
 }
 
-func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) error {
+func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) (cmdExCode int, cmdErr error) {
+	cmdExCode = 1
+	cmdErr = nil
+
 	tempFile, err := makeTempFile("cmd-bridge-tmp")
 	if err != nil {
-		return err
+		return 1, err
 	}
 	tmpfilePth := tempFile.Name()
 	vLogln("tmpfilePth: ", tmpfilePth)
@@ -208,36 +215,37 @@ func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) error {
 
 	cmdBytes, err := json.Marshal(cmdToSend)
 	if err != nil {
-		return err
+		return 1, err
 	}
 
-	var bridgedCommandError error = nil
 	done := make(chan struct{})
 	go func() {
-		bridgedCommandError = sendJSONRequestToServer(cmdBytes)
+		cmdExCode, cmdErr = sendJSONRequestToServer(cmdBytes)
 		close(done)
 	}()
 
 	isFollowFromStart := true
 	follow, err := tailf.Follow(tempFile.Name(), isFollowFromStart)
 	if err != nil {
-		log.Fatalf("couldn't follow %q: %v", tempFile.Name(), err)
+		log.Printf("couldn't follow %q: %v", tempFile.Name(), err)
+		return cmdExCode, err
 	}
 
 	go func() {
 		<-done
 		if err := follow.Close(); err != nil {
-			log.Fatalf("couldn't close follower: %v", err)
+			log.Printf("couldn't close follower: %v", err)
+			// return cmdExCode, err
 		}
 	}()
 
 	_, err = io.Copy(os.Stdout, follow)
 	if err != nil {
-		log.Fatalf("couldn't read from follower: %v", err)
-		return err
+		log.Printf("couldn't read from follower: %v", err)
+		return cmdExCode, err
 	}
 
-	return bridgedCommandError
+	return cmdExCode, cmdErr
 }
 
 func getCommandEnvironments() []EnvironmentKeyValue {
@@ -287,6 +295,8 @@ func main() {
 		Config_IsVerboseLogMode = true
 	}
 
+	// --- server mode
+
 	if *doCommand == "" {
 		fmt.Println("No command specified - starting server...")
 		if err := startServer(); err != nil {
@@ -296,16 +306,26 @@ func main() {
 		os.Exit(0)
 	}
 
-	doCmdEnvs := getCommandEnvironments()
+	// --- non-server mode
 
+	doCmdEnvs := getCommandEnvironments()
 	cmdToSend := CommandModel{
 		Command:          *doCommand,
 		Environments:     doCmdEnvs,
 		WorkingDirectory: *flagCmdWorkDir,
 	}
-	err := sendCommandToServer(cmdToSend, *isVerbose)
-	if err != nil {
-		vLogln("Error: ", err)
+	cmdExCode, cmdErr := sendCommandToServer(cmdToSend, *isVerbose)
+	if cmdErr != nil {
+		vLogln("Error: ", cmdErr)
+		if cmdExCode != 0 {
+			os.Exit(cmdExCode)
+		}
+		vLogln("Command returned an exit code 0 and an error - we'll return an exit code 1")
 		os.Exit(1)
 	}
+	if cmdExCode != 0 {
+		vLogln("No error returned, but command exit code was:", cmdExCode)
+		os.Exit(cmdExCode)
+	}
+	os.Exit(0)
 }
