@@ -81,12 +81,6 @@ An example:
     $ bash _scripts/build_and_run.sh -do='echo "ECHO_THIS_ENV: ${ECHO_THIS_ENV}"'
 
 
-## TODO
-
-* Should handle Environment Variables (specify it for the command) but **should not** add it to it's own environment, in order to keep a "clean" command host environment.
-  * This means that the supported Environment Variables have to be expanded before sending to this server. No `os.Setenv` should be used!
-
-
 ## Release a new version
 
 1. Bump version in `version.go`
