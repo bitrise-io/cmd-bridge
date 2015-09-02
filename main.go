@@ -3,16 +3,15 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"github.com/bitrise-io/tailf"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/ActiveState/tail"
 )
 
 var (
@@ -35,6 +34,7 @@ func usage() {
 	flag.PrintDefaults()
 }
 
+// ResponseModel ...
 type ResponseModel struct {
 	Status   string `json:"status"`
 	Msg      string `json:"msg"`
@@ -85,17 +85,17 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(" (i) Command received")
 
 	defer r.Body.Close()
-	bodyString := ""
-	if bodyBytes, err := ioutil.ReadAll(r.Body); err != nil {
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
 		resp := createErrorResponseModel(
 			fmt.Sprintf("Failed to ready Request Body: %s", err),
 			1,
 		)
 		respondWithJSON(w, resp)
 		return
-	} else {
-		bodyString = string(bodyBytes)
 	}
+
+	bodyString := string(bodyBytes)
 	log.Println(" (i) Raw request body: ", bodyString)
 
 	// queryValues := r.URL.Query()
@@ -112,7 +112,7 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Printf("Command to run: %#v\n", cmdToRun)
 
-	err := OpenCommandLogWriter(cmdToRun.LogFilePath)
+	err = OpenCommandLogWriter(cmdToRun.LogFilePath)
 	cmdExitCode := 0
 	if err == nil {
 		defer CloseCommandLogWriter()
@@ -167,13 +167,13 @@ func sendJSONRequestToServer(jsonBytes []byte) (cmdExCode int, cmdErr error) {
 		return 1, err
 	}
 	defer resp.Body.Close()
-	respBodyString := ""
-	if respBodyBytes, err := ioutil.ReadAll(resp.Body); err != nil {
+	respBodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
 		log.Println("Failed to read cmd-bridge server response: ", err)
 		return 1, err
-	} else {
-		respBodyString = string(respBodyBytes)
 	}
+	respBodyString := string(respBodyBytes)
+
 	vLogln("Response: ", respBodyString)
 
 	var respModel ResponseModel
@@ -186,11 +186,11 @@ func sendJSONRequestToServer(jsonBytes []byte) (cmdExCode int, cmdErr error) {
 	cmdExCode = respModel.ExitCode
 
 	if respModel.Status != configOkStatusMsg {
-		return cmdExCode, errors.New(fmt.Sprintf("Server returned an error response: %#v", respModel))
+		return cmdExCode, fmt.Errorf("Server returned an error response: %#v", respModel)
 	}
 
 	if respModel.ExitCode != 0 {
-		return cmdExCode, errors.New(fmt.Sprintf("Bridged command exit code is not 0: %#v", respModel))
+		return cmdExCode, fmt.Errorf("Bridged command exit code is not 0: %#v", respModel)
 	}
 
 	return cmdExCode, nil
@@ -218,31 +218,15 @@ func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) (cmdExCode int,
 		return 1, err
 	}
 
-	done := make(chan struct{})
+	t, err := tail.TailFile(tempFile.Name(), tail.Config{Follow: true})
+	defer tail.Cleanup()
 	go func() {
 		cmdExCode, cmdErr = sendJSONRequestToServer(cmdBytes)
-		close(done)
+		t.Stop()
 	}()
 
-	isFollowFromStart := true
-	follow, err := tailf.Follow(tempFile.Name(), isFollowFromStart)
-	if err != nil {
-		log.Printf("couldn't follow %q: %v", tempFile.Name(), err)
-		return cmdExCode, err
-	}
-
-	go func() {
-		<-done
-		if err := follow.Close(); err != nil {
-			log.Printf("couldn't close follower: %v", err)
-			// return cmdExCode, err
-		}
-	}()
-
-	_, err = io.Copy(os.Stdout, follow)
-	if err != nil {
-		log.Printf("couldn't read from follower: %v", err)
-		return cmdExCode, err
+	for line := range t.Lines {
+		fmt.Println(line.Text)
 	}
 
 	return cmdExCode, cmdErr
