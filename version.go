@@ -1,4 +1,4 @@
 package main
 
 // VersionString ...
-var VersionString = "0.9.3"
+var VersionString = "0.9.4"
