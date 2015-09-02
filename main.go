@@ -84,14 +84,20 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 func commandHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(" (i) Command received")
 
-	defer r.Body.Close()
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			log.Println(" [!] Failed to close r.Body:", err)
+		}
+	}()
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		resp := createErrorResponseModel(
 			fmt.Sprintf("Failed to ready Request Body: %s", err),
 			1,
 		)
-		respondWithJSON(w, resp)
+		if err := respondWithJSON(w, resp); err != nil {
+			log.Printf("Failed to respond with JSON: %#v", resp)
+		}
 		return
 	}
 
@@ -107,7 +113,9 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("Invalid JSON: %s", err),
 			1,
 		)
-		respondWithJSON(w, resp)
+		if err := respondWithJSON(w, resp); err != nil {
+			log.Printf("Failed to respond with JSON: %#v", resp)
+		}
 		return
 	}
 	fmt.Printf("Command to run: %#v\n", cmdToRun)
@@ -115,7 +123,11 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	err = OpenCommandLogWriter(cmdToRun.LogFilePath)
 	cmdExitCode := 0
 	if err == nil {
-		defer CloseCommandLogWriter()
+		defer func() {
+			if err := CloseCommandLogWriter(); err != nil {
+				log.Println(" [!] Failed to CloseCommandLogWriter:", err)
+			}
+		}()
 		cmdExitCode, err = ExecuteCommand(cmdToRun)
 	}
 
@@ -136,8 +148,10 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 		ExitCode: cmdExitCode,
 	}
 
-	if Config_IsVerboseLogMode {
-		WriteLineToCommandLog("-> Command Finished")
+	if ConfigIsVerboseLogMode {
+		if err := WriteLineToCommandLog("-> Command Finished"); err != nil {
+			log.Println(" [!] Failed to write 'Command Finished' into Command Log")
+		}
 	}
 
 	if err := respondWithJSON(w, respModel); err != nil {
@@ -166,7 +180,12 @@ func sendJSONRequestToServer(jsonBytes []byte) (cmdExCode int, cmdErr error) {
 		log.Println("Failed to send command to cmd-bridge server: ", err)
 		return 1, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Println(" [!] Failed to close resp.Body:", err)
+		}
+	}()
+
 	respBodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("Failed to read cmd-bridge server response: ", err)
@@ -206,8 +225,14 @@ func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) (cmdExCode int,
 	}
 	tmpfilePth := tempFile.Name()
 	vLogln("tmpfilePth: ", tmpfilePth)
-	defer os.Remove(tmpfilePth)
-	defer tempFile.Close()
+	defer func() {
+		if err := os.Remove(tmpfilePth); err != nil {
+			log.Println(" [!] Failed to os.Remove(tmpfilePth):", err)
+		}
+		if err := tempFile.Close(); err != nil {
+			log.Println(" [!] Failed to tempFile.Close:", err)
+		}
+	}()
 
 	cmdToSend.LogFilePath = tmpfilePth
 
@@ -222,7 +247,9 @@ func sendCommandToServer(cmdToSend CommandModel, isVerbose bool) (cmdExCode int,
 	defer tail.Cleanup()
 	go func() {
 		cmdExCode, cmdErr = sendJSONRequestToServer(cmdBytes)
-		t.Stop()
+		if err := t.Stop(); err != nil {
+			log.Println(" [!] Failed to (tail) t.Stop():", err)
+		}
 	}()
 
 	for line := range t.Lines {
@@ -276,7 +303,7 @@ func main() {
 
 	if *isVerbose == true {
 		log.Println(" (i) Verbose mode")
-		Config_IsVerboseLogMode = true
+		ConfigIsVerboseLogMode = true
 	}
 
 	// --- server mode

@@ -1,3 +1,4 @@
 package main
 
-var Config_IsVerboseLogMode = false
+// ConfigIsVerboseLogMode ...
+var ConfigIsVerboseLogMode = false

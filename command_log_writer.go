@@ -8,10 +8,12 @@ import (
 )
 
 var (
+	// CommandLogWriter ...
 	CommandLogWriter io.Writer
 	commandLogFile   *os.File
 )
 
+// OpenCommandLogWriter ...
 func OpenCommandLogWriter(logFilePath string) error {
 	if logFilePath != "" {
 		outputfile, err := os.Create(logFilePath)
@@ -29,15 +31,18 @@ func OpenCommandLogWriter(logFilePath string) error {
 	return nil
 }
 
+// WriteStringToCommandLog ...
 func WriteStringToCommandLog(s string) error {
 	_, err := io.WriteString(CommandLogWriter, s)
 	return err
 }
 
+// WriteLineToCommandLog ...
 func WriteLineToCommandLog(s string) error {
 	return WriteStringToCommandLog(fmt.Sprintf("%s\n", s))
 }
 
+// CloseCommandLogWriter ...
 func CloseCommandLogWriter() error {
 	if commandLogFile != nil {
 		log.Println("CommandLog file closed")

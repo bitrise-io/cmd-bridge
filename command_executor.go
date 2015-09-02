@@ -2,19 +2,23 @@ package main
 
 import (
 	// "errors"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	// "strings"
 	"syscall"
 )
 
+// EnvironmentKeyValue ...
 type EnvironmentKeyValue struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
 
+// CommandModel ...
 type CommandModel struct {
 	Command          string                `json:"command"`
 	WorkingDirectory string                `json:"working_directory"`
@@ -22,6 +26,7 @@ type CommandModel struct {
 	Environments     []EnvironmentKeyValue `json:"environments"`
 }
 
+// RunCommandInDirWithArgsEnvsAndWriters ...
 func RunCommandInDirWithArgsEnvsAndWriters(dirPath string, command string, cmdArgs []string, cmdEnvs []string, stdOutWriter, stdErrWriter io.Writer) (int, error) {
 	c := exec.Command(command, cmdArgs...)
 	c.Env = append(os.Environ(), cmdEnvs...)
@@ -35,9 +40,11 @@ func RunCommandInDirWithArgsEnvsAndWriters(dirPath string, command string, cmdAr
 	cmdExitCode := 0
 	if err := c.Run(); err != nil {
 		// Did the command fail because of an unsuccessful exit code
-		var waitStatus syscall.WaitStatus
 		if exitError, ok := err.(*exec.ExitError); ok {
-			waitStatus = exitError.Sys().(syscall.WaitStatus)
+			waitStatus, ok := exitError.Sys().(syscall.WaitStatus)
+			if !ok {
+				return 1, errors.New("Failed to cast exit status")
+			}
 			cmdExitCode = waitStatus.ExitStatus()
 		}
 		return cmdExitCode, err
@@ -57,9 +64,12 @@ func RunCommandInDirWithArgsEnvsAndWriters(dirPath string, command string, cmdAr
 // 	return err
 // }
 
+// ExecuteCommand ...
 func ExecuteCommand(cmdToRun CommandModel) (int, error) {
-	if err := WriteLineToCommandLog("[[command-start]]"); err != nil {
-		return 0, err
+	if ConfigIsVerboseLogMode {
+		if err := WriteLineToCommandLog("[[command-start]]"); err != nil {
+			return 0, err
+		}
 	}
 
 	// // unlock keychain
@@ -67,8 +77,10 @@ func ExecuteCommand(cmdToRun CommandModel) (int, error) {
 	// 	return err
 	// }
 
-	if Config_IsVerboseLogMode {
-		WriteLineToCommandLog(fmt.Sprintf("Command to run: $ %s", cmdToRun.Command))
+	if ConfigIsVerboseLogMode {
+		if err := WriteLineToCommandLog(fmt.Sprintf("Command to run: $ %s", cmdToRun.Command)); err != nil {
+			log.Println(" [!] Failed to write 'command to run' into Command Log")
+		}
 	}
 
 	cmdExec := "/bin/bash"
@@ -90,9 +102,15 @@ func ExecuteCommand(cmdToRun CommandModel) (int, error) {
 	cmdExitCode, commandErr := RunCommandInDirWithArgsEnvsAndWriters(cmdToRun.WorkingDirectory, cmdExec, cmdArgs, cmdEnvs, CommandLogWriter, CommandLogWriter)
 
 	if commandErr != nil {
-		WriteLineToCommandLog(fmt.Sprintf("Command failed: %s", commandErr))
+		if err := WriteLineToCommandLog(fmt.Sprintf("Command failed: %s", commandErr)); err != nil {
+			log.Println(" [!] Failed to write 'Command failed' into Command Log")
+		}
 	}
 
-	WriteLineToCommandLog("[[command-finished]]")
+	if ConfigIsVerboseLogMode {
+		if err := WriteLineToCommandLog("[[command-finished]]"); err != nil {
+			log.Println(" [!] Failed to write '[[command-finished]]' into Command Log")
+		}
+	}
 	return cmdExitCode, commandErr
 }
