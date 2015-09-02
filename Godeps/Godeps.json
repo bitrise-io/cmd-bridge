@@ -1,0 +1,19 @@
+{
+	"ImportPath": "github.com/bitrise-io/cmd-bridge",
+	"GoVersion": "go1.5",
+	"Deps": [
+		{
+			"ImportPath": "github.com/ActiveState/tail",
+			"Rev": "068b72961a6bc5b4a82cf4fc14ccc724c0cfa73a"
+		},
+		{
+			"ImportPath": "github.com/howeyc/fsnotify",
+			"Comment": "v0.9.0-14-g4894fe7",
+			"Rev": "4894fe7efedeeef21891033e1cce3b23b9af7ad2"
+		},
+		{
+			"ImportPath": "gopkg.in/tomb.v1",
+			"Rev": "dd632973f1e7218eb1089048e0798ec9ae7dceb8"
+		}
+	]
+}
