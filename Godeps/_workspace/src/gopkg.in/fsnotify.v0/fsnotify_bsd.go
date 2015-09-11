@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build freebsd openbsd netbsd dragonfly darwin
+// +build freebsd openbsd netbsd darwin
 
 package fsnotify
 
@@ -361,6 +361,13 @@ func (w *Watcher) readEvents() {
 				}
 			}
 
+			if fileEvent.IsRename() {
+				w.removeWatch(fileEvent.Name)
+				w.femut.Lock()
+				delete(w.fileExists, fileEvent.Name)
+				w.femut.Unlock()
+			}
+
 			if fileInfo != nil && fileInfo.IsDir() && fileEvent.IsModify() && !fileEvent.IsDelete() {
 				w.sendDirectoryChangeEvents(fileEvent.Name)
 			} else {
@@ -371,12 +378,6 @@ func (w *Watcher) readEvents() {
 			// Move to next event
 			events = events[1:]
 
-			if fileEvent.IsRename() {
-				w.removeWatch(fileEvent.Name)
-				w.femut.Lock()
-				delete(w.fileExists, fileEvent.Name)
-				w.femut.Unlock()
-			}
 			if fileEvent.IsDelete() {
 				w.removeWatch(fileEvent.Name)
 				w.femut.Lock()
@@ -488,9 +489,28 @@ func (w *Watcher) sendDirectoryChangeEvents(dirPath string) {
 			fileEvent.create = true
 			w.internalEvent <- fileEvent
 		}
+
+		// watchDirectoryFiles (but without doing another ReadDir)
+		if fileInfo.IsDir() == false {
+			// Watch file to mimic linux fsnotify
+			w.addWatch(filePath, sys_NOTE_ALLEVENTS)
+		} else {
+			// If the user is currently watching directory
+			// we want to preserve the flags used
+			w.enmut.Lock()
+			currFlags, found := w.enFlags[filePath]
+			w.enmut.Unlock()
+			var newFlags uint32 = syscall.NOTE_DELETE
+			if found {
+				newFlags |= currFlags
+			}
+
+			// Linux gives deletes if not explicitly watching
+			w.addWatch(filePath, newFlags)
+		}
+
 		w.femut.Lock()
 		w.fileExists[filePath] = true
 		w.femut.Unlock()
 	}
-	w.watchDirectoryFiles(dirPath)
 }

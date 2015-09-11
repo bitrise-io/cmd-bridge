@@ -5,16 +5,17 @@ package tail
 import (
 	"bufio"
 	"fmt"
-	"github.com/ActiveState/tail/ratelimiter"
-	"github.com/ActiveState/tail/util"
-	"github.com/ActiveState/tail/watch"
-	"gopkg.in/tomb.v1"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/ActiveState/tail/ratelimiter"
+	"github.com/ActiveState/tail/util"
+	"github.com/ActiveState/tail/watch"
+	"gopkg.in/tomb.v1"
 )
 
 var (
@@ -63,6 +64,8 @@ type Tail struct {
 
 	file    *os.File
 	reader  *bufio.Reader
+	tracker *watch.InotifyTracker
+
 	watcher watch.FileWatcher
 	changes *watch.FileChanges
 
@@ -99,7 +102,12 @@ func TailFile(filename string, config Config) (*Tail, error) {
 	if t.Poll {
 		t.watcher = watch.NewPollingFileWatcher(filename)
 	} else {
-		t.watcher = watch.NewInotifyFileWatcher(filename)
+		t.tracker = watch.NewInotifyTracker()
+		w, err := t.tracker.NewWatcher()
+		if err != nil {
+			return nil, err
+		}
+		t.watcher = watch.NewInotifyFileWatcher(filename, w)
 	}
 
 	if t.MustExist {
@@ -211,10 +219,17 @@ func (tail *Tail) tailFileSync() {
 
 	// Read line by line.
 	for {
+		// grab the position in case we need to back up in the event of a half-line
+		offset, err := tail.Tell()
+		if err != nil {
+			tail.Kill(err)
+			return
+		}
+
 		line, err := tail.readLine()
 
 		// Process `line` even if err is EOF.
-		if err == nil || (err == io.EOF && line != "") {
+		if err == nil {
 			cooloff := !tail.sendLine(line)
 			if cooloff {
 				// Wait a second before seeking till the end of
@@ -236,8 +251,22 @@ func (tail *Tail) tailFileSync() {
 			}
 		} else if err == io.EOF {
 			if !tail.Follow {
+				if line != "" {
+					tail.sendLine(line)
+				}
 				return
 			}
+
+			if tail.Follow && line != "" {
+				// this has the potential to never return the last line if
+				// it's not followed by a newline; seems a fair trade here
+				err := tail.seekTo(SeekInfo{Offset: offset, Whence: 0})
+				if err != nil {
+					tail.Kill(err)
+					return
+				}
+			}
+
 			// When EOF is reached, wait for more data to become
 			// available. Wait strategy is based on the `tail.watcher`
 			// implementation (inotify or polling).
@@ -317,7 +346,11 @@ func (tail *Tail) openReader() {
 }
 
 func (tail *Tail) seekEnd() error {
-	_, err := tail.file.Seek(0, 2)
+	return tail.seekTo(SeekInfo{Offset: 0, Whence: 2})
+}
+
+func (tail *Tail) seekTo(pos SeekInfo) error {
+	_, err := tail.file.Seek(pos.Offset, pos.Whence)
 	if err != nil {
 		return fmt.Errorf("Seek error on %s: %s", tail.Filename, err)
 	}
@@ -356,6 +389,8 @@ func (tail *Tail) sendLine(line string) bool {
 // Cleanup removes inotify watches added by the tail package. This function is
 // meant to be invoked from a process's exit handler. Linux kernel may not
 // automatically remove inotify watches after the process exits.
-func Cleanup() {
-	watch.Cleanup()
+func (tail *Tail) Cleanup() {
+	if tail.tracker != nil {
+		tail.tracker.CloseAll()
+	}
 }
