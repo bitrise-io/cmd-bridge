@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/bitrise-io/cmd-bridge",
-	"GoVersion": "go1.5",
+	"GoVersion": "go1.5.1",
 	"Packages": [
 		"./..."
 	],
