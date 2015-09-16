@@ -9,7 +9,7 @@
 To install this version, run the following commands (in a bash shell):
 
 ```
-curl -L https://github.com/bitrise-io/cmd-bridge/releases/download/{{version}}/cmd-bridge-$(uname -s)-$(uname -m) > /usr/local/bin/cmd-bridge
+curl -fL https://github.com/bitrise-io/cmd-bridge/releases/download/{{version}}/cmd-bridge-$(uname -s)-$(uname -m) > /usr/local/bin/cmd-bridge
 ```
 
 Then:
