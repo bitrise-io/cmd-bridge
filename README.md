@@ -2,8 +2,7 @@
 
 Stripped down, minimal server written in [go](https://golang.org/)
 which accepts a command line command, executes it,
-logs it's output and returns a JSON response
-with the exit status.
+logs it's output and returns a JSON response with the exit status.
 
 
 ## Build & run (for development)
