@@ -84,10 +84,12 @@ workflows:
         inputs:
         - content: |-
             #!/bin/bash
-            set -v
-            set -e
-            go get -u ./...
+            set -ex
             rm -rf ./Godeps
+            rm -rf ./vendor
+            go get -t -d ./...
+            go get gopkg.in/fsnotify.v1
+            go get gopkg.in/tomb.v1
             godep save ./...
 
   ci:
