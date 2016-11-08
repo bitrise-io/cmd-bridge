@@ -1,4 +1,4 @@
-format_version: 1.0.0
+format_version: 1.3.0
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 app:
@@ -15,36 +15,50 @@ workflows:
         inputs:
         - content: |-
             #!/bin/bash
-            set -e
-            set -v
-
-            # Install dependencies
-            go get -u github.com/tools/godep
-
+            set -ex
             # Check for unhandled errors
             go get -u github.com/kisielk/errcheck
-
             # Go lint
             go get -u github.com/golang/lint/golint
 
   _test:
     steps:
     - script:
-        title: Godeps - GOPATH patch
+        title: Print infos for the test
         inputs:
         - content: |-
-            set -e
-            set -v
-            envman add --key ORIG_GOPATH --value "$GOPATH"
-            envman add --key GOPATH --value "$(godep path):$GOPATH"
+            set -ev
+            go version
+            echo $GO15VENDOREXPERIMENT
+    - script:
+        title: GOLIST_WITHOUT_VENDOR
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+            no_vendor_paths="$(go list ./... | grep -v vendor)"
+            envman add --key GOLIST_WITHOUT_VENDOR --value "$no_vendor_paths"
     - script:
         title: Go Test
         inputs:
-        - content: godep go test ./...
+        - content: |-
+            #!/bin/bash
+            set -ex
+            go test ./...
+    - script:
+        title: Go Vet
+        inputs:
+        - content: |-
+            #!/bin/bash
+            set -ex
+            go vet $GOLIST_WITHOUT_VENDOR
     - script:
         title: Err check
         inputs:
-        - content: errcheck -asserts=true -blank=true $(godep go list ./...)
+        - content: |-
+            #!/bin/bash
+            set -ex
+            errcheck -asserts=true -blank=true $GOLIST_WITHOUT_VENDOR
     - script:
         title: Go Lint
         inputs:
@@ -52,16 +66,15 @@ workflows:
             #!/bin/bash
             set -e
 
-            golint_out="$(golint ./...)"
-            if [[ "${golint_out}" != "" ]] ; then
-              echo "=> Golint issues found:"
-              echo "${golint_out}"
-              exit 1
-            fi
-    - script:
-        title: Restore original GOPATH
-        inputs:
-        - content: envman add --key GOPATH --value "$ORIG_GOPATH"
+            while read -r line; do
+              echo "-> Linting: $line"
+              golint_out="$(golint $line)"
+              if [[ "${golint_out}" != "" ]] ; then
+                echo "=> Golint issues found:"
+                echo "${golint_out}"
+                exit 1
+              fi
+            done <<< "$GOLIST_WITHOUT_VENDOR"
 
   install:
     before_run:
@@ -72,9 +85,7 @@ workflows:
         inputs:
         - content: |-
             #!/bin/bash
-            set -v
-            set -e
-
+            set -ex
             go install
 
   godeps-update:
@@ -84,10 +95,13 @@ workflows:
         inputs:
         - content: |-
             #!/bin/bash
-            set -v
-            set -e
-            go get -u ./...
+            set -ex
+            go get -u github.com/tools/godep
             rm -rf ./Godeps
+            rm -rf ./vendor
+            go get -t -d ./...
+            go get gopkg.in/fsnotify.v1
+            go get gopkg.in/tomb.v1
             godep save ./...
 
   ci:

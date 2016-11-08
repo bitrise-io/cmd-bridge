@@ -1,19 +1,44 @@
 {
 	"ImportPath": "github.com/bitrise-io/cmd-bridge",
-	"GoVersion": "go1.5.1",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v75",
 	"Packages": [
 		"./..."
 	],
 	"Deps": [
 		{
-			"ImportPath": "github.com/ActiveState/tail",
-			"Comment": "v0-10-g4b368d1",
-			"Rev": "4b368d1590196ade29993d6a0896591403180bbd"
+			"ImportPath": "github.com/hpcloud/tail",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
 		},
 		{
-			"ImportPath": "gopkg.in/fsnotify.v0",
-			"Comment": "v0.9.3",
-			"Rev": "ea925a0a47d225b2ca7f9932b01d2ed4f3ec74f6"
+			"ImportPath": "github.com/hpcloud/tail/ratelimiter",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/util",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/watch",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/winfile",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "9a2e24c3733eddc63871eda99f253e2db29bd3b9"
+		},
+		{
+			"ImportPath": "gopkg.in/fsnotify.v1",
+			"Comment": "v1.4.2",
+			"Rev": "629574ca2a5df945712d3079857300b5e4da0236"
 		},
 		{
 			"ImportPath": "gopkg.in/tomb.v1",

@@ -11,7 +11,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ActiveState/tail"
+	"github.com/hpcloud/tail"
+	_ "golang.org/x/sys/unix"
 )
 
 var (
