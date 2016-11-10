@@ -136,8 +136,7 @@ workflows:
         inputs:
         - content: |-
             #!/bin/bash
-            set -v
-            set -e
+            set -ex
             if [ -f _bin/tmpbin ] ; then
               rm _bin/tmpbin
             fi
